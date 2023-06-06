@@ -1,7 +1,8 @@
 # Arch Manual Installation
 
-This is a minimal Arch installation for my own setup. I wrote this to keep track of the steps I have taken and it is definitely not a replacement for the far more detailed and comprehensive guide on the ArchWiki (which can be found [here](https://wiki.archlinux.org/title/Installation_guide)).
+> See my alternative scripted installation [here](https://github.com/derryleng/arch-scripted-install).
 
+This is a minimal Arch installation for my own setup. I wrote this to keep track of the steps I have taken and it is definitely not a replacement for the far more detailed and comprehensive guide on the ArchWiki (which can be found [here](https://wiki.archlinux.org/title/Installation_guide)).
 
 ## Table of Contents
 
@@ -19,38 +20,28 @@ This is a minimal Arch installation for my own setup. I wrote this to keep track
   - [Change root into new system](#change-root-into-new-system)
 - [Finish Setting Up](#finish-setting-up)
   - [Update user account settings](#update-user-account-settings)
-  - [Adjust clock, locale and keyboard layout](#adjust-clock-locale-and-keyboard-layout)
+  - [Adjust clock, locale, language, keyboard layout](#adjust-clock-locale-language-keyboard-layout)
   - [Set the hostname](#set-the-hostname)
   - [Install bootloader (grub)](#install-bootloader-grub)
   - [Exit chroot and reboot](#exit-chroot-and-reboot)
   - [Connect to internet on new system](#connect-to-internet-on-new-system)
 - [Install AUR helper (yay)](#install-aur-helper-yay)
 - [Install Display manager](#install-display-manager)
-  - [ly](#ly)
-  - [sddm](#sddm)
+- [Install Fonts](#install-fonts)
 - [Install Sound (pipewire)](#install-sound-pipewire)
 - [Install Graphics drivers (nvidia)](#install-graphics-drivers-nvidia)
-- [Install DE/WM](#install-dewm)
+- [Install WM](#install-wm)
   - [awesome](#awesome)
   - [bspwm](#bspwm)
-  - [GNOME](#gnome)
-- [Install Fonts](#install-fonts)
-- [Install Filesystem Tools](#install-filesystem-tools)
 - [Install Themes](#install-themes)
-- [Install Documentation](#install-documentation)
 - [Install More Useful Stuff](#install-more-useful-stuff)
 - [Clone Dotfiles](#clone-dotfiles)
 
 ## Get the ISO
 
-Get the latest official Arch ISO from
-https://archlinux.org/download/.
-
-Don't bother with formatting your USB stick every time and just use [Ventoy](https://www.ventoy.net/en/doc_start.html). 
-
-If you're planning on overwriting any existing drives, back up your data.
-
-Restart your PC and boot with your USB drive for next section.
+1. Download latest [official Arch ISO](https://archlinux.org/download/).
+2. Use [Ventoy](https://www.ventoy.net/en/doc_start.html).
+3. Boot with your Ventoy USB device.
 
 ## Install Arch
 
@@ -180,15 +171,15 @@ If you want to mount some windows disks on startup:
 
 ```bash
 # Find the UUID of the partitions you need to mount
-sudo blkid | grep ' UUID='
+blkid | grep ' UUID='
 
 # Make some mount directories
-sudo mkdir -p /mnt/windows/c
-sudo mkdir -p /mnt/windows/d
+mkdir -p /mnt/windows/c
+mkdir -p /mnt/windows/d
 # etc...
 
 # Edit fstab
-sudo /etc/fstab
+nano /etc/fstab
 # Add new lines e.g.
 #
 # UUID=OUR_C_DRIVE_UUID /mnt/windows/c ntfs-3g defaults,nls=utf8,umask=000,dmask=027,fmask=137,uid=1000,gid=1000,windows_names 0 0
@@ -219,16 +210,16 @@ Create a new user account and then add them to sudoers.
 ```bash
 useradd -m -G wheel -s /bin/bash derry
 passwd derry
-sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/g' /etc/sudoers
+sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 ```
 
 (Optional) Edit /etc/sudoers to allow non-sudo use of shutdown, reboot, mount, umount.
 
 ```bash
-sed -i 's+# %wheel ALL=(ALL:ALL) NOPASSWD: ALL+%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/sbin/mount,/sbin/umount+g' /etc/sudoers
+sed -i 's+# %wheel ALL=(ALL:ALL) NOPASSWD: ALL+%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/sbin/mount,/sbin/umount+' /etc/sudoers
 ```
 
-### Adjust clock, locale and keyboard layout
+### Adjust clock, locale, language, keyboard layout
 
 ```bash
 ln -sf /usr/share/zoneinfo/Europe/London /etc/localtime
@@ -238,20 +229,22 @@ hwclock --systohc
 Uncomment the correct line in /etc/locale.gen and generate the locales.
 
 ```bash
-sed -i 's/#en_GB.UTF-8 UTF-8/en_GB.UTF-8 UTF-8/g' /etc/locale.gen
+sed -i 's/#en_GB.UTF-8 UTF-8/en_GB.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 ```
+
+Set language and keyboard mapping.
 
 ```bash
 echo "LANG=en_GB.UTF-8" > /etc/locale.conf
 echo "KEYMAP=uk" > /etc/vconsole.conf
 ```
 
-Install and enable ntp
+Install and enable ntp.
 
 ```bash
-sudo pacman -S ntp
-sudo systemctl enable ntpd.service
+pacman -S ntp
+systemctl enable ntpd.service
 ```
 
 ### Set the hostname
@@ -271,19 +264,21 @@ pacman -S --needed grub os-prober efibootmgr
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=archlinux
 grub-mkconfig -o /boot/grub/grub.cfg
 
-sed 's/#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false/g' /etc/default/grub
-update-grub
-# If the update-grub command doesn't exist:
-# Write the following into /usr/sbin/update-grub:
-#
-# #!/bin/sh
-# set -e
-# exec grub-mkconfig -o /boot/grub/grub.cfg "$@"
-#
+# Uncomment os-prober in grub configs
+sed -i 's/#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
+
+# Create the update-grub command
+touch /usr/sbin/update-grub
+echo '#!/bin/sh
+set -e
+exec grub-mkconfig -o /boot/grub/grub.cfg "$@"' > /usr/sbin/update-grub
+
 # Then set file ownership to make it useable:
-#
-# chown root:root /usr/sbin/update-grub
-# chmod 755 /usr/sbin/update-grub
+chown root:root /usr/sbin/update-grub
+chmod 755 /usr/sbin/update-grub
+
+# Update grub configs
+update-grub
 ```
 
 ### Exit chroot and reboot
@@ -325,17 +320,6 @@ See more details here: https://github.com/Jguer/yay
 
 ## Install Display manager
 
-### ly
-
-```bash
-yay -S ly
-sudo systemctl enable ly.service
-```
-
-See more details here: https://github.com/fairyglade/ly
-
-### sddm
-
 ```bash
 yay -S sddm qt5-quickcontrols2
 sudo systemctl enable sddm.service
@@ -344,245 +328,84 @@ sudo systemctl enable sddm.service
 Apply a nice theme
 
 ```bash
+# Clone and build theme
 git clone https://github.com/GistOfSpirit/TerminalStyleLogin
-# then follow instructions to build
+bash TerminalStyleLogin/scripts/build.sh
 
-# Make some edits:
-# Set fontSize=18 in theme.conf
-# Add visible: false inside Login {id: loginForm}
+# Make some edits
+sed -i 's/fontSize=[0-9]\+/fontSize=18/' TerminalStyleLogin/theme.conf
+sed -i 's/^\(.*{proxy.hostName}.*\)/\/\* \1 \*\//' TerminalStyleLogin/Main.qml
 
 # Copy contents of build folder to /usr/share/sddm/themes/TerminalStyleLogin
+mkdir -p /usr/share/sddm/themes/TerminalStyleLogin
+cp -r TerminalStyleLogin/build/* /usr/share/sddm/themes/TerminalStyleLogin
 
-# Create the file /etc/sddm.conf and add the following contents:
-# [Theme]
-# Current=TerminalStyleLogin
-```
-
-## Install Sound (pipewire)
-
-| Package             | Description |
-| ------------------- | ----------- |
-| alsa-firmware       |             |
-| alsa-plugins        |             |
-| alsa-utils          |             |
-| gst-plugin-pipewire |             |
-| pavucontrol         |             |
-| pipewire            |             |
-| pipewire-alsa       |             |
-| pipewire-jack       |             |
-| pipewire-pulse      |             |
-| wireplumber         |             |
-
-```bash
-yay -S alsa-firmware alsa-plugins alsa-utils gst-plugin-firmware pavucontrol \
-pipewire pipewire-alsa pipewire-jack pipewire-pulse wireplumber
-```
-
-## Install Graphics drivers (nvidia)
-
-```bash
-yay -S --needed nvidia-dkms nvidia-utils nvidia-settings
-```
-
-## Install DE/WM
-
-### awesome
-
-| Package                  | Description                         |
-| ------------------------ | ----------------------------------- |
-| xorg-server              | Display server for X11              |
-| xbindkeys                |                                     |
-| xclip                    |                                     |
-| xdo                      |                                     |
-| xorg-xbacklight          |                                     |
-| xorg-xdpyinfo            |                                     |
-| xorg-xinit               |                                     |
-| xorg-xinput              |                                     |
-| xorg-xkill               |                                     |
-| xorg-xrandr              |                                     |
-| xorg-xsetroot            |                                     |
-| archlinux-xdg-menu       |                                     |
-| picom                    |                                     |
-| rofi                     |                                     |
-| dunst                    |                                     |
-| dmenu                    |                                     |
-| (AUR) awesome-git        |                                     |
-| luarocks                 |                                     |
-| volumeicon               |                                     |
-| network-manager-applet   |                                     |
-| ibus                     | Keyboard layouts and input methods  |
-| blueman                  |                                     |
-| bluez                    |                                     |
-| bluez-utils              |                                     |
-| gvfs                     | File dialog                         |
-| gvfs-afc                 | AFC (mobile devices) support        |
-| gvfs-gphoto2             | PTP camera/MTP media player support |
-| gvfs-mtp                 | MTP device support                  |
-| gvfs-nfs                 | NFS support                         |
-| gvfs-smb                 | SMB/CIFS (Windows client) support   |
-| thunar                   | File browser                        |
-| thunar-archive-plugin    |                                     |
-| thunar-media-tags-plugin |                                     |
-| thunar-volman            |                                     |
-| tumbler                  |                                     |
-| alacritty                | Terminal emulator                   |
-
-```bash
-yay -S --needed xorg-server xbindkeys xclip xdo xorg-xbacklight xorg-xdpyinfo  \
-xorg-xinit xorg-xinput xorg-xkill xorg-xrandr xorg-xsetroot archlinux-xdg-menu \
-picom rofi dmenu dunst \
-awesome-git luarocks \
-volumeicon network-manager-applet ibus \
-blueman bluez bluez-utils \
-gvfs gvfs-afc gvfs-gphoto2 gvfs-mtp gvfs-nfs gvfs-smb \
-thunar thunar-archive-plugin thunar-media-tags-plugin thunar-volman tumbler \
-alacritty
-```
-
-### bspwm
-
-| Package                  | Description                         |
-| ------------------------ | ----------------------------------- |
-| xorg-server              | Display server for X11              |
-| xbindkeys                |                                     |
-| xclip                    |                                     |
-| xdo                      |                                     |
-| xorg-xbacklight          |                                     |
-| xorg-xdpyinfo            |                                     |
-| xorg-xinit               |                                     |
-| xorg-xinput              |                                     |
-| xorg-xkill               |                                     |
-| xorg-xrandr              |                                     |
-| xorg-xsetroot            |                                     |
-| archlinux-xdg-menu       |                                     |
-| picom                    |                                     |
-| rofi                     |                                     |
-| dmenu                    |                                     |
-| dunst                    |                                     |
-| bspwm                    |                                     |
-| sxhkd                    |                                     |
-| polybar                  |                                     |
-| volumeicon               |                                     |
-| network-manager-applet   |                                     |
-| ibus                     | Keyboard layouts and input methods  |
-| blueman                  |                                     |
-| bluez                    |                                     |
-| bluez-utils              |                                     |
-| gvfs                     | File dialog                         |
-| gvfs-afc                 | AFC (mobile devices) support        |
-| gvfs-gphoto2             | PTP camera/MTP media player support |
-| gvfs-mtp                 | MTP device support                  |
-| gvfs-nfs                 | NFS support                         |
-| gvfs-smb                 | SMB/CIFS (Windows client) support   |
-| thunar                   | File browser                        |
-| thunar-archive-plugin    |                                     |
-| thunar-media-tags-plugin |                                     |
-| thunar-volman            |                                     |
-| tumbler                  |                                     |
-| alacritty                | Terminal emulator                   |
-
-```bash
-yay -S --needed xorg-server xbindkeys xclip xdo xorg-xbacklight xorg-xdpyinfo  \
-xorg-xinit xorg-xinput xorg-xkill xorg-xrandr xorg-xsetroot archlinux-xdg-menu \
-picom rofi dmenu dunst \
-bspwm sxhkd polybar \
-volumeicon network-manager-applet ibus \
-blueman bluez bluez-utils \
-gvfs gvfs-afc gvfs-gphoto2 gvfs-mtp gvfs-nfs gvfs-smb \
-thunar thunar-archive-plugin thunar-media-tags-plugin thunar-volman tumbler \
-alacritty
-```
-
-### GNOME
-
-| Package                                   | Description                                           |
-| ----------------------------------------- | ----------------------------------------------------- |
-| xorg-server                               | Display server for X11                                |
-| xbindkeys                                 |                                                       |
-| xclip                                     |                                                       |
-| xdo                                       |                                                       |
-| xorg-xbacklight                           |                                                       |
-| xorg-xdpyinfo                             |                                                       |
-| xorg-xinit                                |                                                       |
-| xorg-xinput                               |                                                       |
-| xorg-xkill                                |                                                       |
-| xorg-xrandr                               |                                                       |
-| xorg-xsetroot                             |                                                       |
-| archlinux-xdg-menu                        |                                                       |
-| gnome-shell                               |                                                       |
-| gnome-bluetooth-3.0                       | Optional GNOME dependency for bluetooth support       |
-| gnome-control-center                      | Optional GNOME dependency for system settings         |
-| gnome-disk-utility                        | Optional GNOME dependency for mount with keyfiles     |
-| gst-plugin-pipewire                       | Optional GNOME dependency for screen recording        |
-| gst-plugins-good                          | Optional GNOME dependency for screen recording        |
-| power-profiles-daemon                     | Optional GNOME dependency for power profile switching |
-| (AUR) extension-manager                   | Browsing, installing, managing GNOME shell extensions |
-| gnome-tweaks                              |                                                       |
-| dconf-editor                              |                                                       |
-| (AUR) gnome-shell-extension-pop-shell-git | GNOME shell extension for tiling windows              |
-| gvfs                                      | File dialog                                           |
-| gvfs-afc                                  | AFC (mobile devices) support                          |
-| gvfs-gphoto2                              | PTP camera/MTP media player support                   |
-| gvfs-mtp                                  | MTP device support                                    |
-| gvfs-nfs                                  | NFS support                                           |
-| gvfs-smb                                  | SMB/CIFS (Windows client) support                     |
-| nautilus                                  | Native GNOME file browser                             |
-| alacritty                                 | Terminal emulator                                     |
-
-```bash
-yay -S --needed xorg-server xbindkeys xclip xdo xorg-xbacklight xorg-xdpyinfo \
-xorg-xinit xorg-xinput xorg-xkill xorg-xrandr xorg-xsetroot archlinux-xdg-menu \
-gnome-shell gnome-bluetooth-3.0 gnome-control-center gnome-disk-utility \
-gst-plugin-pipewire gst-plugins-good power-profiles-daemon \
-extension-manager gnome-tweaks dconf-editor gnome-shell-extension-pop-shell-git \
-gvfs gvfs-afc gvfs-gphoto2 gvfs-mtp gvfs-nfs gvfs-smb \
-nautilus alacritty
+# Set sddm theme
+touch /etc/sddm.conf
+echo "[Theme]
+Current=TerminalStyleLogin" > /etc/sddm.conf
 ```
 
 ## Install Fonts
 
 ```bash
-yay -S adobe-source-code-pro-fonts adobe-source-han-sans-cn-fonts  \
-adobe-source-han-sans-jp-fonts adobe-source-han-sans-kr-fonts      \
-cantarell-fonts freetype2 ttf-bitstream-vera ttf-dejavu            \
-ttf-liberation ttf-opensans ttf-jetbrains-mono-nerd                \
-ttf-nerd-fonts-symbols-2048-em ttf-font-awesome noto-fonts         \
-noto-fonts-emoji
+yay -S adobe-source-code-pro-fonts adobe-source-han-sans-cn-fonts \
+adobe-source-han-sans-jp-fonts adobe-source-han-sans-kr-fonts \
+ttf-jetbrains-mono-nerd noto-fonts noto-fonts-emoji ttf-font-awesome \
+ttf-opensans ttf-dejavu ttf-liberation cantarell-fonts
 ```
 
-## Install Filesystem Tools
+## Install Sound (pipewire)
 
 ```bash
-yay -S --needed e2fsprogs btrfs-progs exfat-utils ntfs-3g smartmontools
+yay -S pipewire pipewire-alsa pipewire-jack pipewire-pulse \
+gst-plugin-firmware libpulse wireplumber pavucontrol
+```
+
+## Install Graphics drivers (nvidia)
+
+```bash
+yay -S --needed nvidia nvidia-settings
+```
+
+## Install WM
+
+```bash
+yay -S --needed xorg-server xbindkeys xclip xdo xorg-xbacklight xorg-xdpyinfo  \
+xorg-xinit xorg-xinput xorg-xkill xorg-xrandr xorg-xsetroot archlinux-xdg-menu \
+gvfs blueman volumeicon network-manager-applet ibus-pinyin \
+picom thunar alacritty rofi dunst
+```
+
+### awesome
+
+```bash
+yay -S --needed awesome-git
+```
+
+### bspwm
+
+```bash
+yay -S --needed bspwm sxhkd polybar
 ```
 
 ## Install Themes
 
 ```bash
-yay -S bibata-cursor-theme-bin arc-gtk-theme-git papirus-icon-theme-git \
-qt5ct lxappearance
-```
-
-## Install Documentation
-
-```bash
-yay -S --needed man-db man-pages texinfo tldr
+yay -S bibata-cursor-theme-bin arc-gtk-theme-git \
+papirus-icon-theme-git python-qdarkstyle qt5ct lxappearance
 ```
 
 ## Install More Useful Stuff
 
 ```bash
-yay -S --needed acpi acpid baobab bash-completion discord firewalld \
-firefox fish fzf gnome-disk-utility gnome-font-viewer gnome-keyring \
-gnome-logs htop hwinfo inxi nano-syntax-highlighting neovim polkit  \
-reflector rsync rtkit scrot sysstat tlp vlc wget xdg-user-dirs      \
-xdg-user-dirs-gtk visual-studio-code-bin octopi spotify
+yay -S --needed man-db tldr baobab bash-completion discord firewalld firefox \
+fish fzf gnome-disk-utility gnome-font-viewer gnome-keyring htop neovim \
+polkit reflector tlp vlc xdg-user-dirs visual-studio-code-bin octopi spotify
 
-sudo systemctl enable acipd.service
+sudo systemctl enable tlp
 sudo systemctl enable bluetooth.service
 sudo systemctl enable firewalld
-sudo systemctl enable tlp
-sudo systemctl enable reflector.service
 ```
 
 ## Clone Dotfiles
@@ -591,7 +414,7 @@ sudo systemctl enable reflector.service
 git clone --bare https://github.com/derryleng/dotfiles.git /home/derry/.dotfiles
 
 # Set dotfiles alias if not done already
-# alias dotfiles='/usr/bin/git --git-dir=/home/derry/.dotfiles/ --work-tree=/home/derry'
+# alias dotfiles='git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME'
 
 dotfiles config --local status.showUntrackedFiles no
 dotfiles checkout
