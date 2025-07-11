@@ -1,49 +1,16 @@
 # Arch Manual Installation
 
-> See my alternative scripted installation [here](https://github.com/derryleng/arch-scripted-install).
+This is a minimal Arch installation for my own setup.
 
-This is a minimal Arch installation for my own setup. I wrote this to keep track of the steps I have taken and it is definitely not a replacement for the far more detailed and comprehensive guide on the ArchWiki (which can be found [here](https://wiki.archlinux.org/title/Installation_guide)).
-
-## Table of Contents
-
-- [Get the ISO](#get-the-iso)
-- [Install Arch](#install-arch)
-  - [Configure keyboard layout](#configure-keyboard-layout)
-  - [Connect to the internet (Wi-Fi)](#connect-to-the-internet-wi-fi)
-  - [Update system clock](#update-system-clock)
-  - [Create partitions](#create-partitions)
-  - [Format partitions](#format-partitions)
-  - [Mount partitions](#mount-partitions)
-  - [Update mirrors and package lists](#update-mirrors-and-package-lists)
-  - [Install base packages](#install-base-packages)
-  - [Generate fstab file](#generate-fstab-file)
-  - [Change root into new system](#change-root-into-new-system)
-- [Finish Setting Up](#finish-setting-up)
-  - [Update user account settings](#update-user-account-settings)
-  - [Adjust clock, locale, language, keyboard layout](#adjust-clock-locale-language-keyboard-layout)
-  - [Set the hostname](#set-the-hostname)
-  - [Install bootloader (grub)](#install-bootloader-grub)
-  - [Exit chroot and reboot](#exit-chroot-and-reboot)
-  - [Connect to internet on new system](#connect-to-internet-on-new-system)
-- [Install AUR helper (yay)](#install-aur-helper-yay)
-- [Install Display manager](#install-display-manager)
-- [Install Fonts](#install-fonts)
-- [Install Sound (pipewire)](#install-sound-pipewire)
-- [Install Graphics drivers (nvidia)](#install-graphics-drivers-nvidia)
-- [Install WM](#install-wm)
-  - [awesome](#awesome)
-  - [bspwm](#bspwm)
-- [Install Themes](#install-themes)
-- [Install More Useful Stuff](#install-more-useful-stuff)
-- [Clone Dotfiles](#clone-dotfiles)
+This is for keeping track of the steps I have taken and it is not a replacement for the guide on the ArchWiki ([here](https://wiki.archlinux.org/title/Installation_guide)).
 
 ## Get the ISO
 
-1. Download latest [official Arch ISO](https://archlinux.org/download/).
-2. Use [Ventoy](https://www.ventoy.net/en/doc_start.html).
+1. Install [Ventoy](https://www.ventoy.net/en/doc_start.html) on a USB drive.
+2. Get latest [official Arch ISO](https://archlinux.org/download/).
 3. Boot with your Ventoy USB device.
 
-## Install Arch
+## Pre-installation
 
 ### Configure keyboard layout
 
@@ -65,13 +32,6 @@ station wlan0 get-networks
 station wlan0 connect ...YOUR_SSID...
 ```
 
-### Update system clock
-
-```bash
-timedatectl set-timezone "Europe/London"
-timedatectl set-ntp true
-```
-
 ### Create partitions
 
 First, you can view current system partitions using:
@@ -82,10 +42,10 @@ lsblk
 fdisk -l
 ```
 
-Use the fdisk utility to create any required partition (here assuming you are using the disk **nvme1n1**):
+Use the fdisk utility to create any required partition (here assuming you are using the disk **sda**):
 
 ```bash
-fdisk /dev/nvme1n1
+fdisk /dev/sda
 # Then follow instructions, do not write out using "w" until you are absolutely sure.
 ```
 
@@ -99,33 +59,30 @@ NB:
 ### Format partitions
 
 ```bash
-# Assuming you made a new partition nvme1n1p1 for EFI boot, format it.
+# Assuming you made a new partition sda1 for EFI boot, format it.
 # Otherwise, skip this step if using an existing EFI partition (e.g nvme0n1p1).
-mkfs.fat -F32 /dev/nvme1n1p1
+mkfs.fat -F32 /dev/sda1
 
-# Assuming you made a new partition nvme1n1p2 for swap, format it.
+# Assuming you made a new partition sda2 for swap, format it.
 # Otherwise, skip this step if not using a swap (or have an existing swap partition).
-mkswap /dev/nvme1n1p2
+mkswap /dev/sda2
 
-# Assuming your root partition is nvme1n1p3, format it.
-# Commonly used filesystem is Ext4:
-mkfs.ext4 /dev/nvme1n1p3
-# Or you can use BTRFS:
-mkfs.btrfs /dev/nvme1n1p3
+# Assuming your root partition is sda3, format as BTRFS
+mkfs.btrfs /dev/sda3
 ```
 
 ### Mount partitions
 
 ```bash
 # Mount the swap
-swapon /dev/nvme1n1p2
+swapon /dev/sda2
 
 # Mount the root partition to /mnt
-mount /dev/nvme1n1p3 /mnt
+mount /dev/sda3 /mnt
 
 # Mount the boot partition to /mnt/boot/efi
 mkdir -p /mnt/boot/efi
-mount /dev/nvme1n1p1 /mnt/boot/efi
+mount /dev/sda1 /mnt/boot/efi
 ```
 
 ### Update mirrors and package lists
@@ -142,20 +99,21 @@ Make sure package lists are up to date.
 pacman -Sy
 ```
 
-### Install base packages
+### Install base packages (pacstrap)
 
 Install some essential packages using pacstrap:
 
 - Base and base development packages
 - Linux kernel and header files
 - Linux firmware
-- Intel microcode (for Intel CPU)
-- Basic text editors (vi and nano)
-- Networking (using NetworkManager)
+- Intel and AMD CPU microcode
+- Basic text editors (`vi` and `nano`)
+- Networking (using `NetworkManager`)
 - Git
+- Userspace utilities for file systems (`btrfs-progs`, `exfatprogs`, `e2fsprogs`, `ntfs-3g`)
 
 ```bash
-pacstrap /mnt base base-devel linux linux-headers linux-firmware intel-ucode vi nano networkmanager git
+pacstrap /mnt base base-devel linux linux-headers linux-firmware intel-ucode amd-ucode vi nano networkmanager git btrfs-progs exfatprogs e2fsprogs ntfs-3g
 ```
 
 ### Generate fstab file
@@ -171,7 +129,7 @@ If you want to mount some windows disks on startup:
 
 ```bash
 # Find the UUID of the partitions you need to mount
-blkid | grep ' UUID='
+blkid | grep 'UUID='
 
 # Make some mount directories
 mkdir -p /mnt/windows/c
@@ -193,9 +151,7 @@ nano /etc/fstab
 arch-chroot /mnt
 ```
 
-**You should now be root user in the new system.**
-
-## Finish Setting Up
+> You should now be root user in the new system.
 
 ### Update user account settings
 
@@ -205,46 +161,59 @@ Update the password for root user.
 passwd
 ```
 
-Create a new user account and then add them to sudoers.
+Create a new user account (called user) to wheel group, then update the password.
 
 ```bash
-useradd -m -G wheel -s /bin/bash derry
-passwd derry
-sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+useradd -m -G wheel -s /bin/bash user
+passwd user
 ```
 
-(Optional) Edit /etc/sudoers to allow non-sudo use of shutdown, reboot, mount, umount.
+Edit `/etc/sudoers` to allow wheel group to execute any command, by uncommenting this line:
 
 ```bash
-sed -i 's+# %wheel ALL=(ALL:ALL) NOPASSWD: ALL+%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/sbin/mount,/sbin/umount+' /etc/sudoers
+# %wheel ALL=(ALL:ALL) ALL
 ```
 
-### Adjust clock, locale, language, keyboard layout
+(Optional) Edit `/etc/sudoers` to allow non-sudo use of shutdown, reboot, mount, umount, by updating this line:
+
+```bash
+# %wheel ALL=(ALL:ALL) NOPASSWD: ALL
+```
+
+to
+
+```bash
+%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/sbin/mount,/sbin/umount
+```
+
+### Set clock and locale
 
 ```bash
 ln -sf /usr/share/zoneinfo/Europe/London /etc/localtime
-hwclock --systohc
 ```
 
-Uncomment the correct line in /etc/locale.gen and generate the locales.
+Uncomment the correct line in `/etc/locale.gen`:
 
 ```bash
-sed -i 's/#en_GB.UTF-8 UTF-8/en_GB.UTF-8 UTF-8/' /etc/locale.gen
+#en_GB.UTF-8 UTF-8
+```
+
+then generate the locales.
+
+```bash
 locale-gen
 ```
 
-Set language and keyboard mapping.
+### Set language
 
 ```bash
 echo "LANG=en_GB.UTF-8" > /etc/locale.conf
-echo "KEYMAP=uk" > /etc/vconsole.conf
 ```
 
-Install and enable ntp.
+### Set keyboard mapping
 
 ```bash
-pacman -S ntp
-systemctl enable ntpd.service
+echo "KEYMAP=uk" > /etc/vconsole.conf
 ```
 
 ### Set the hostname
@@ -253,35 +222,51 @@ systemctl enable ntpd.service
 echo "myhostname" > /etc/hostname
 ```
 
-### Install bootloader (grub)
+## Install AUR helper (yay)
 
-Install the bootloader, here we use Grub for EFI boot.
-
-You can also use os-prober to detect other bootloaders - skip the last two steps if you don't need this.
+> Switch to the new sudo user from here onwards.
 
 ```bash
-pacman -S --needed grub os-prober efibootmgr
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=archlinux
-grub-mkconfig -o /boot/grub/grub.cfg
-
-# Uncomment os-prober in grub configs
-sed -i 's/#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
-
-# Create the update-grub command
-touch /usr/sbin/update-grub
-echo '#!/bin/sh
-set -e
-exec grub-mkconfig -o /boot/grub/grub.cfg "$@"' > /usr/sbin/update-grub
-
-# Then set file ownership to make it useable:
-chown root:root /usr/sbin/update-grub
-chmod 755 /usr/sbin/update-grub
-
-# Update grub configs
-update-grub
+mkdir repos
+cd repos
+git clone https://aur.archlinux.org/yay.git
+cd yay
+makepkg -si
+yay -Y --gendb
+yay -Syu --devel
+yay -Y --devel --save
 ```
 
-### Exit chroot and reboot
+## Install bootloader (rEFInd with Secure Boot using shim)
+
+Install required packages, install rEFInd, and sign the kernel with the local key that was created. ([Reference](https://wiki.archlinux.org/title/REFInd#Using_Machine_Owner_Key))
+
+(Make sure you are still in `user`, not `root`)
+
+```bash
+yay -S --needed efibootmgr refind shim-signed sbsigntools
+
+sudo refind-install --shim /usr/share/shim-signed/shimx64.efi --localkeys
+
+sudo sbsign --key /etc/refind.d/keys/refind_local.key --cert /etc/refind.d/keys/refind_local.crt --output /boot/vmlinuz-linux /boot/vmlinuz-linux
+```
+
+Automate the updating of rEFInd files in the EFI system partition (ESP) by creating a pacman hook: ([Reference](https://wiki.archlinux.org/title/REFInd#Upgrading))
+
+`/etc/pacman.d/hooks/refind.hook`
+```
+[Trigger]
+Operation=Upgrade
+Type=Package
+Target=refind
+
+[Action]
+Description = Updating rEFInd on ESP
+When=PostTransaction
+Exec=/usr/bin/refind-install
+```
+
+## Exit chroot and reboot
 
 Now you should have a minimal working system, exit out of the system, unmount the partitions and then reboot.
 
@@ -290,6 +275,10 @@ exit
 umount -R /mnt
 reboot
 ```
+
+During boot, certify rEFInd boot in the MOK manager utility using the certificate at `/EFI/refind/keys/refind_local.cer`.
+
+## Setup Desktop Environment
 
 ### Connect to internet on new system
 
@@ -303,47 +292,11 @@ sudo systemctl start NetworkManager.service
 nmtui
 ```
 
-## Install AUR helper (yay)
+## Install display manager (Ly)
 
 ```bash
-mkdir repos
-cd repos
-git clone https://aur.archlinux.org/yay.git
-cd yay
-makepkg -si
-yay -Y --gendb
-yay -Syu --devel
-yay -Y --devel --save
-```
-
-See more details here: https://github.com/Jguer/yay
-
-## Install Display manager
-
-```bash
-yay -S sddm qt5-quickcontrols2
-sudo systemctl enable sddm.service
-```
-
-Apply a nice theme
-
-```bash
-# Clone and build theme
-git clone https://github.com/GistOfSpirit/TerminalStyleLogin
-bash TerminalStyleLogin/scripts/build.sh
-
-# Make some edits
-sed -i 's/fontSize=[0-9]\+/fontSize=18/' TerminalStyleLogin/theme.conf
-sed -i 's/^\(.*{proxy.hostName}.*\)/\/\* \1 \*\//' TerminalStyleLogin/Main.qml
-
-# Copy contents of build folder to /usr/share/sddm/themes/TerminalStyleLogin
-mkdir -p /usr/share/sddm/themes/TerminalStyleLogin
-cp -r TerminalStyleLogin/build/* /usr/share/sddm/themes/TerminalStyleLogin
-
-# Set sddm theme
-touch /etc/sddm.conf
-echo "[Theme]
-Current=TerminalStyleLogin" > /etc/sddm.conf
+yay -S ly
+systemctl enable ly.service
 ```
 
 ## Install Fonts
@@ -365,35 +318,7 @@ gst-plugin-firmware libpulse wireplumber pavucontrol
 ## Install Graphics drivers (nvidia)
 
 ```bash
-yay -S --needed nvidia nvidia-settings
-```
-
-## Install WM
-
-```bash
-yay -S --needed xorg-server xbindkeys xclip xdo xorg-xbacklight xorg-xdpyinfo  \
-xorg-xinit xorg-xinput xorg-xkill xorg-xrandr xorg-xsetroot archlinux-xdg-menu \
-gvfs blueman volumeicon network-manager-applet ibus-pinyin \
-picom thunar alacritty rofi dunst
-```
-
-### awesome
-
-```bash
-yay -S --needed awesome-git
-```
-
-### bspwm
-
-```bash
-yay -S --needed bspwm sxhkd polybar
-```
-
-## Install Themes
-
-```bash
-yay -S bibata-cursor-theme-bin arc-gtk-theme-git \
-papirus-icon-theme-git python-qdarkstyle qt5ct lxappearance
+yay -S --needed nvidia-dkms nvidia-settings
 ```
 
 ## Install More Useful Stuff
