@@ -10,7 +10,7 @@ This is for keeping track of the steps I have taken and it is not a replacement 
 2. Get latest [official Arch ISO](https://archlinux.org/download/).
 3. Boot with your Ventoy USB device.
 
-## Pre-installation
+## Live ISO environment steps
 
 ### Configure keyboard layout
 
@@ -120,29 +120,6 @@ pacstrap /mnt base base-devel linux linux-headers linux-firmware intel-ucode amd
 
 ```bash
 genfstab -U /mnt >> /mnt/etc/fstab
-
-# Have a look and check for errors.
-nano /mnt/etc/fstab
-```
-
-If you want to mount some windows disks on startup:
-
-```bash
-# Find the UUID of the partitions you need to mount
-blkid | grep 'UUID='
-
-# Make some mount directories
-mkdir -p /mnt/windows/c
-mkdir -p /mnt/windows/d
-# etc...
-
-# Edit fstab
-nano /etc/fstab
-# Add new lines e.g.
-#
-# UUID=OUR_C_DRIVE_UUID /mnt/windows/c ntfs-3g defaults,nls=utf8,umask=000,dmask=027,fmask=137,uid=1000,gid=1000,windows_names 0 0
-#
-# and etc for the other drives.
 ```
 
 ### Change root into new system
@@ -151,7 +128,7 @@ nano /etc/fstab
 arch-chroot /mnt
 ```
 
-> You should now be root user in the new system.
+## After arch-chroot into new system
 
 ### Update user account settings
 
@@ -186,11 +163,7 @@ to
 %wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/sbin/mount,/sbin/umount
 ```
 
-### Set clock and locale
-
-```bash
-ln -sf /usr/share/zoneinfo/Europe/London /etc/localtime
-```
+### Set locale
 
 Uncomment the correct line in `/etc/locale.gen`:
 
@@ -222,51 +195,25 @@ echo "KEYMAP=uk" > /etc/vconsole.conf
 echo "myhostname" > /etc/hostname
 ```
 
-## Install AUR helper (yay)
+### Install bootloader (grub)
 
-> Switch to the new sudo user from here onwards.
-
-```bash
-mkdir repos
-cd repos
-git clone https://aur.archlinux.org/yay.git
-cd yay
-makepkg -si
-yay -Y --gendb
-yay -Syu --devel
-yay -Y --devel --save
-```
-
-## Install bootloader (rEFInd with Secure Boot using shim)
-
-Install required packages, install rEFInd, and sign the kernel with the local key that was created. ([Reference](https://wiki.archlinux.org/title/REFInd#Using_Machine_Owner_Key))
-
-(Make sure you are still in `user`, not `root`)
+Install the bootloader, here we use Grub for EFI boot.
 
 ```bash
-yay -S --needed efibootmgr refind shim-signed sbsigntools
-
-sudo refind-install --shim /usr/share/shim-signed/shimx64.efi --localkeys
-
-sudo sbsign --key /etc/refind.d/keys/refind_local.key --cert /etc/refind.d/keys/refind_local.crt --output /boot/vmlinuz-linux /boot/vmlinuz-linux
+pacman -S --needed grub os-prober efibootmgr
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=archlinux
+grub-mkconfig -o /boot/grub/grub.cfg
 ```
 
-Automate the updating of rEFInd files in the EFI system partition (ESP) by creating a pacman hook: ([Reference](https://wiki.archlinux.org/title/REFInd#Upgrading))
+Enable OS Prober by uncommenting the line in `/etc/default/grub`:
 
-`/etc/pacman.d/hooks/refind.hook`
-```
-[Trigger]
-Operation=Upgrade
-Type=Package
-Target=refind
-
-[Action]
-Description = Updating rEFInd on ESP
-When=PostTransaction
-Exec=/usr/bin/refind-install
+```bash
+#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false
 ```
 
-## Exit chroot and reboot
+then run the `grub-mkconfig` line again to save changes.
+
+## Exit arch-chroot and reboot into new system
 
 Now you should have a minimal working system, exit out of the system, unmount the partitions and then reboot.
 
@@ -276,11 +223,9 @@ umount -R /mnt
 reboot
 ```
 
-During boot, certify rEFInd boot in the MOK manager utility using the certificate at `/EFI/refind/keys/refind_local.cer`.
+## Post-install setup
 
-## Setup Desktop Environment
-
-### Connect to internet on new system
+### Connect to internet
 
 Assuming you have successfully booted into new system, start up NetworkManager and connect to the internet.
 
@@ -292,36 +237,98 @@ sudo systemctl start NetworkManager.service
 nmtui
 ```
 
-## Install display manager (Ly)
+### Install AUR helper (yay)
+
+```bash
+mkdir ~/repos
+cd ~/repos
+git clone https://aur.archlinux.org/yay.git
+cd yay
+makepkg -si
+yay -Y --gendb
+yay -Syu --devel
+yay -Y --devel --save
+```
+
+### Install display manager (ly)
 
 ```bash
 yay -S ly
-systemctl enable ly.service
+sudo systemctl enable ly.service
 ```
 
-## Install Fonts
+### Install fonts
 
-```bash
-yay -S adobe-source-code-pro-fonts adobe-source-han-sans-cn-fonts \
-adobe-source-han-sans-jp-fonts adobe-source-han-sans-kr-fonts \
-ttf-jetbrains-mono-nerd noto-fonts noto-fonts-emoji ttf-font-awesome \
-ttf-opensans ttf-dejavu ttf-liberation cantarell-fonts
+- ttf-jetbrains-mono-nerd
+- noto-fonts
+- noto-fonts-cjk
+- noto-fonts-emoji
+- noto-fonts-extra
+- adobe-source-code-pro-fonts
+- adobe-source-sans-fonts
+- adobe-source-serif-fonts
+- adobe-source-han-sans-otc-fonts
+- adobe-source-han-serif-otc-fonts
+- ttf-hanazono
+- ttf-liberation
+- ttf-dejavu
+- ttf-font-awesome
+
+### Install sound (pipewire)
+
+- pipewire
+- pipewire-alsa
+- pipewire-jack
+- pipewire-pulse
+- gst-plugin-firmware
+- libpulse
+- wireplumber
+
+### Install graphics (nvidia)
+
+- nvidia-dkms
+
+Enable `modeset` by adding this line to `/etc/modprobe.d/nvidia.conf`:
+
+```
+options nvidia_drm modeset=1
 ```
 
-## Install Sound (pipewire)
+Add the following to `MODULES` array in `/etc/mkinitcpio.conf`:
 
-```bash
-yay -S pipewire pipewire-alsa pipewire-jack pipewire-pulse \
-gst-plugin-firmware libpulse wireplumber pavucontrol
+```
+MODULES=(... nvidia nvidia_modeset nvidia_uvm nvidia_drm ...)
 ```
 
-## Install Graphics drivers (nvidia)
+Rebuild the initramfs with `sudo mkinitcpio -P`.
 
-```bash
-yay -S --needed nvidia-dkms nvidia-settings
-```
+### Install window manager (hyprland)
 
-## Install More Useful Stuff
+- hyprland
+- uwsm
+- alacritty
+- wofi
+
+### Clone dotfiles
+
+Then reboot!
+
+### Install software
+
+- xdg-user-dirs
+- flatpak
+
+Install the following as flatpaks:
+
+- librewolf
+- flatseal
+
+
+
+
+
+
+### Install More Useful Stuff
 
 ```bash
 yay -S --needed man-db tldr baobab bash-completion discord firewalld firefox \
@@ -333,7 +340,7 @@ sudo systemctl enable bluetooth.service
 sudo systemctl enable firewalld
 ```
 
-## Clone Dotfiles
+### Clone Dotfiles
 
 ```bash
 git clone --bare https://github.com/derryleng/dotfiles.git /home/derry/.dotfiles
